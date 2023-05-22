@@ -1,0 +1,22 @@
+[project]
+name = "heterarchical-element-model"
+version = "0.0.1"
+authors = [
+  { name="Benjy Marks", email="benjy.marks@sydney.edu.au" },
+]
+description = "A heterarchical multiscale model for simulating granular materials"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/benjym/heterarchical-element-model"
+"Bug Tracker" = "https://github.com/benjym/heterarchical-element-model/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
