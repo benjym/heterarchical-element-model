@@ -1,11 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import json5
+from tqdm import tqdm
+
+# Elastic wave speed
+# A wave moves at v_ela = np.sqrt(E/rho)
+# A wave crosses a distance dx in dt = dx/v_ela = dx/np.sqrt(E/rho)
+# We therefore need a timestep dt < dx/np.sqrt(E/rho)
 
 def swap(i, j, arr):
     new_arr = arr.copy()
     for a in new_arr:
-        a[i[0],i[1],i[2],:], a[j[0],j[1],j[2],:] = a[j[0],j[1],j[2],:], a[i[0],i[1],i[2],:]
+        tt = a[i[0],i[1],i[2]].copy()
+        a[i[0],i[1],i[2]] = a[j[0],j[1],j[2]]
+        a[j[0],j[1],j[2]] = tt
+        
     return new_arr
 
 def move_overhangs(P,s,x,v,a):
@@ -17,41 +26,28 @@ def move_overhangs(P,s,x,v,a):
                     if x[i,j,k,0] > P["grid"]["dx"][0]/2.: # RIGHT
                         if np.isnan(s[i+1,j,k]):
                             x[i,j,k,0], x[i+1,j,k,0] = 0, x[i,j,k,0]-P["grid"]["dx"][0]
-                            # s,v = swap([i, j, k], [i+1, j, k], [s,v])
-                            s[i,j,k],   s[i+1,j,k]   = s[i+1,j,k],   s[i,j,k]
-                            v[i,j,k,:], v[i+1,j,k,:] = v[i+1,j,k,:], v[i,j,k,:]
-                            # print(v[i,j,k,0])
+                            s,v = swap([i, j, k], [i+1, j, k], [s,v])
                         else:
                             x[i,j,k,0] = P["grid"]["dx"][0]/2.
                             v[i,j,k,0] = 0
                     elif x[i,j,k,0] < -P["grid"]["dx"][0]/2.: # LEFT
                         if np.isnan(s[i-1,j,k]):
                             x[i,j,k,0], x[i-1,j,k,0] = 0, x[i,j,k,0]+P["grid"]["dx"][0]
-                            # s,v = swap([i, j, k], [i-1, j, k], [s,v])
-                            s[i,j,k],   s[i-1,j,k]   = s[i-1,j,k],   s[i,j,k]
-                            v[i,j,k,:], v[i-1,j,k,:] = v[i-1,j,k,:], v[i,j,k,:]
-                            # print(v[i,j,k,0])
+                            s,v = swap([i, j, k], [i-1, j, k], [s,v])
                         else:
                             x[i,j,k,0] = - P["grid"]["dx"][0]/2.
                             v[i,j,k,0] = 0
                     elif x[i,j,k,1] > P["grid"]["dx"][1]/2.: # UP
                         if np.isnan(s[i,j+1,k]):
                             x[i,j,k,1], x[i,j+1,k,1] = 0, x[i,j,k,1]-P["grid"]["dx"][1]
-                            # s,v = swap([i, j, k], [i, j+1, k], [s,v])
-                            s[i,j,k],   s[i,j+1,k]   = s[i,j+1,k],   s[i,j,k]
-                            v[i,j,k,:], v[i,j+1,k,:] = v[i,j+1,k,:], v[i,j,k,:]
-                            # print(v[i,j,k,1])
+                            s,v = swap([i, j, k], [i, j+1, k], [s,v])
                         else:
                             x[i,j,k,1] = P["grid"]["dx"][1]/2.
                             v[i,j,k,1] = 0
                     elif x[i,j,k,1] < -P["grid"]["dx"][1]/2.: # DOWN
                         if np.isnan(s[i,j-1,k]):
                             x[i,j,k,1], x[i,j-1,k,1] = 0, x[i,j,k,1]+P["grid"]["dx"][1]
-                            # print(v[i,j,k,1])
-                            # s,v = swap([i, j, k], [i, j-1, k], [s,v])
-                            # print(v[i,j-1,k,1])
-                            s[i,j,k],   s[i,j-1,k]   = s[i,j-1,k],   s[i,j,k]
-                            v[i,j,k,:], v[i,j-1,k,:] = v[i,j-1,k,:], v[i,j,k,:]
+                            s,v = swap([i, j, k], [i, j-1, k], [s,v])
                         else:
                             x[i,j,k,1] = - P["grid"]["dx"][1]/2.
                             v[i,j,k,1] = 0
@@ -78,9 +74,11 @@ def update_forces(P,s,x,v):
                                 R_e = (s[i,j,k] + s[target[0],target[1],target[2]])/(s[i,j,k]*s[target[0],target[1],target[2]]) # equivalent radius of contact particles —-- what does this mean in this context and is this even something worth calculating??
                                 delta = np.abs(x[i,j,k,ax] - x[target[0],target[1],target[2],ax])# - dx[dir]
                                 if delta > 0:
-                                    this_force = dir*np.sqrt(16/9)*np.sqrt(E_star*R_e)*(delta)**(1.5)
-                                    F[i,j,k,dir] -= this_force
-                                    F[target[0],target[1],target[2],dir] += this_force
+                                    normal_force = dir*np.sqrt(16/9)*np.sqrt(E_star*R_e)*(delta)**(1.5)
+                                    damping_force = 0#1e2*v[i,j,k,ax]
+                                    # beta = -np.log(P["mat"]["rest"])/np.sqrt(np.log(P["mat"]["rest"])**2 + np.pi**2)
+                                    F[i,j,k,dir] -= normal_force - damping_force
+                                    F[target[0],target[1],target[2],dir] += normal_force + damping_force
     return F
 
 def main(input_filename):
@@ -98,6 +96,9 @@ def main(input_filename):
 
     nt = int(P["time"]["t_max"] / P["time"]["dt"])
     P["grid"]["dx"] = [P["grid"]["Lx"] / P["grid"]["nx"], P["grid"]["Ly"] / P["grid"]["ny"]]
+    # check elastic wave speed is ok
+    dt_ela = np.min(P["grid"]["dx"])/np.sqrt(P["mat"]["E"]/P["mat"]["rho"])
+    print(f'Time step ({P["time"]["dt"]}) is {dt_ela/P["time"]["dt"]:.2f} times smaller than the elastic limit ({dt_ela})')
     x_ref = [np.linspace(0,P["grid"]["Lx"],P["grid"]["nx"]), np.linspace(0,P["grid"]["Ly"],P["grid"]["ny"])]
     X, Y = np.meshgrid(x_ref[0], x_ref[1], indexing='ij')
     X_flat = X.flatten()
@@ -116,27 +117,58 @@ def main(input_filename):
     v = np.zeros_like(x) # velocity of particle centres
     a = np.zeros_like(x) # acceleration of particle centres
 
-    for tstep in range(nt):
+    for tstep in tqdm(range(nt)):
         s, x, v, a = move_overhangs(P,s,x,v,a)
         F = update_forces(P,s,x,v)
         
         
         a = F / P["mat"]["m_cell"]
         v += P["time"]["dt"] * a
-        x += P["time"]["dt"] * v
+        for i in range(1,P["grid"]["nx"]-1): # TODO: IGNORING ALL BOUNDARIES FOR NOW
+            for j in range(1,P["grid"]["ny"]-1): # TODO: IGNORING ALL BOUNDARIES FOR NOW
+                x[i,j] += P["time"]["dt"] * v[i,j]
+
+
         # print(v)
 
         if P["debug"]:
-            plt.ion()
-            plt.clf()
-            plt.title(f"t = {tstep*P['time']['dt']:0.3f}")
-            # plt.imshow(s[:,:,0])
-            plt.pcolormesh(X_c,Y_c,empty_c,edgecolors='lightgray')
-            plt.pcolormesh(X,Y,empty,edgecolors='k')
-            plt.scatter(X_flat+x[...,0].flatten(),Y_flat+x[...,1].flatten(),c=s.flatten(),cmap='viridis',vmin=0,vmax=P["IC"]["max"])
-            plt.quiver(X+x[:,:,0,0],Y+x[:,:,0,1],F[:,:,0,0],F[:,:,0,1])
-            plt.colorbar()
-            plt.pause(1e-2)
+            if tstep%P["time"]["tstep_plot"] == 0:
+                plt.ion()
+                plt.clf()
+                plt.subplot(231)
+                plt.title(f"t = {tstep*P['time']['dt']:0.3f}")
+                plt.pcolormesh(X_c,Y_c,empty_c,edgecolors='lightgray')
+                plt.pcolormesh(X,Y,empty,edgecolors='k')
+                plt.scatter(X_flat+x[...,0,0].flatten(),Y_flat+x[...,0,1].flatten(),c=s[:,:,0].flatten(),cmap='viridis',vmin=0,vmax=P["IC"]["max"])
+                plt.quiver(X+x[:,:,0,0],Y+x[:,:,0,1],F[:,:,0,0],F[:,:,0,1])
+                plt.colorbar()
+
+                plt.subplot(232)
+                plt.title('Avg size')
+                s_bar = np.nanmean(s,axis=2)
+                plt.pcolormesh(x_ref[0],x_ref[1],s_bar.T,cmap='viridis',shading='nearest')
+                plt.colorbar()
+
+                plt.subplot(233)
+                plt.title('Solid fraction')
+                nu = np.sum(~np.isnan(s),axis=2)
+                plt.pcolormesh(x_ref[0],x_ref[1],s_bar.T,cmap='viridis',shading='nearest')
+                plt.colorbar()
+                
+                plt.subplot(234)
+                plt.title('Vel mag')
+                U = np.nanmean(np.sqrt(np.sum(v**2,axis=3)),axis=2)
+                lim = 0.9*np.max(np.abs(U))
+                plt.pcolormesh(x_ref[0],x_ref[1],U.T,cmap='bwr',shading='nearest',vmin=-lim,vmax=lim)
+                plt.colorbar()
+
+                plt.subplot(235)
+                plt.title('Pressure')
+                # pressure = np.nanmean(np.sum(F,axis=3),axis=2)
+                # plt.pcolormesh(x_ref[0],x_ref[1],pressure.T,cmap='viridis',shading='nearest')
+                # plt.colorbar()
+
+                plt.pause(1e-2)
 
 if __name__ == '__main__':
     input_filename = '../json5/test.json5'

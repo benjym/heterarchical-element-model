@@ -1,27 +1,29 @@
 {
     "grid": {
         "nx" : 5,
-        "ny" : 10,
-        "nm" : 1,
-        "Lx" : 5,
-        "Ly" : 10,
+        "ny" : 20,
+        "nm" : 2,
+        "Lx" : 0.5,
+        "Ly" : 2,
         "Lz" : 1, // into the page
     },
     "IC" : {
         "type" : "random",
         "min" : 0.1,
         "max" : 1,
-        "fill" : 0.5,
+        "fill" : 0.75,
         "boundary" : true,
     },
     "time" : {
-        dt : 1e-2,
+        dt : 5e-5,
         t_max : 2,
+        tstep_plot : 100,
     },
     "mat" : {
-        E : 1e3,
+        E : 1e8,
         nu : 0.3,
         rho : 2700,
+        rest : 0.5,
     },
     "gravity" : {
         "mag" : 9.81,
